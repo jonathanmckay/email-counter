@@ -1,0 +1,39 @@
+"""Configuration management for Email Counter."""
+
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+class Config:
+    """Application configuration."""
+    
+    # Email settings
+    REPORT_EMAIL = os.getenv('REPORT_EMAIL', '')
+    GMAIL_ADDRESS = os.getenv('GMAIL_ADDRESS', '')
+    
+    # Analysis settings
+    ANALYSIS_DAYS = int(os.getenv('ANALYSIS_DAYS', 30))
+    
+    # Report settings
+    REPORT_TIME = os.getenv('REPORT_TIME', '09:00')
+    
+    # Gmail API settings
+    SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+    CREDENTIALS_FILE = 'credentials.json'
+    TOKEN_FILE = 'token.json'
+    
+    @classmethod
+    def validate(cls):
+        """Validate configuration."""
+        if not cls.REPORT_EMAIL:
+            raise ValueError("REPORT_EMAIL must be set in .env file")
+        
+        if not os.path.exists(cls.CREDENTIALS_FILE):
+            raise ValueError(
+                f"{cls.CREDENTIALS_FILE} not found. "
+                "Please download OAuth credentials from Google Cloud Console."
+            )
+        
+        return True
