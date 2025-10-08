@@ -17,7 +17,7 @@ class Config:
     ANALYSIS_DAYS = int(os.getenv('ANALYSIS_DAYS', 30))
     
     # Report settings
-    REPORT_TIME = os.getenv('REPORT_TIME', '09:00')
+    REPORT_TIME = os.getenv('REPORT_TIME', '05:30')
     
     # Gmail API settings
     SCOPES = [

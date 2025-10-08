@@ -21,7 +21,7 @@ def create_launchd_plist():
     # Create LaunchAgents directory if it doesn't exist
     plist_dir.mkdir(parents=True, exist_ok=True)
     
-    # plist content - runs daily at 9 AM
+    # plist content - runs daily at 5:30 AM
     plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -41,9 +41,9 @@ def create_launchd_plist():
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>9</integer>
+        <integer>5</integer>
         <key>Minute</key>
-        <integer>0</integer>
+        <integer>30</integer>
     </dict>
     
     <key>StandardOutPath</key>
@@ -82,7 +82,7 @@ def create_cron_entry():
     venv_python = script_dir / "venv" / "bin" / "python"
     reporter_script = script_dir / "email_reporter.py"
     
-    cron_line = f"0 9 * * * cd {script_dir} && {venv_python} {reporter_script} >> {script_dir}/emailcounter.log 2>&1"
+    cron_line = f"30 5 * * * cd {script_dir} && {venv_python} {reporter_script} >> {script_dir}/emailcounter.log 2>&1"
     
     print("\nFor Linux/Unix systems, add this line to your crontab:")
     print("  (Run: crontab -e)")

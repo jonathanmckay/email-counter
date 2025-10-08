@@ -98,18 +98,20 @@ class GmailAnalyzer:
             print(f"Error fetching thread {thread_id}: {error}")
             return []
     
-    def analyze_response_times(self, days: int = 30) -> Dict:
-        """Analyze email response times for the past N days."""
+    def analyze_response_times(self, days: int = 30, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict:
+        """Analyze email response times for the past N days or a specific date range."""
         email_address = self.get_email_address()
         if not email_address:
             return {}
         
-        print(f"\nAnalyzing emails for: {email_address}")
-        print(f"Looking back {days} days...")
-        
         # Calculate date range
-        end_date = datetime.now(pytz.UTC)
-        start_date = end_date - timedelta(days=days)
+        if end_date is None:
+            end_date = datetime.now(pytz.UTC)
+        if start_date is None:
+            start_date = end_date - timedelta(days=days)
+        
+        print(f"\nAnalyzing emails for: {email_address}")
+        print(f"Period: {start_date.strftime('%Y-%m-%d %H:%M')} to {end_date.strftime('%Y-%m-%d %H:%M')}")
         
         # Query for sent emails
         query = f'from:me after:{start_date.strftime("%Y/%m/%d")}'
@@ -160,15 +162,17 @@ class GmailAnalyzer:
                     next_is_sent = 'SENT' in next_msg['labelIds']
                     
                     if current_is_received and next_is_sent:
-                        # Calculate response time
-                        response_time = next_msg['date'] - current_msg['date']
-                        response_times.append({
-                            'received': current_msg['date'],
-                            'sent': next_msg['date'],
-                            'response_time': response_time,
-                            'subject': current_msg['headers'].get('Subject', 'No subject'),
-                            'from': current_msg['headers'].get('From', 'Unknown')
-                        })
+                        # Only include responses that were sent within our date range
+                        if start_date <= next_msg['date'] <= end_date:
+                            # Calculate response time
+                            response_time = next_msg['date'] - current_msg['date']
+                            response_times.append({
+                                'received': current_msg['date'],
+                                'sent': next_msg['date'],
+                                'response_time': response_time,
+                                'subject': current_msg['headers'].get('Subject', 'No subject'),
+                                'from': current_msg['headers'].get('From', 'Unknown')
+                            })
             
             print(f"Analyzed {len(analyzed_threads)} email threads")
             print(f"Found {len(response_times)} responses")
@@ -199,6 +203,8 @@ class GmailAnalyzer:
                     'slowest_response': max(rt['response_time'].total_seconds() for rt in response_times),
                     'response_details': response_times,
                     'analysis_period_days': days,
+                    'start_date': start_date,
+                    'end_date': end_date,
                     'email_address': email_address,
                     'generated_at': datetime.now(pytz.UTC)
                 }
@@ -207,6 +213,8 @@ class GmailAnalyzer:
                     'total_responses': 0,
                     'message': 'No responses found in the specified period',
                     'analysis_period_days': days,
+                    'start_date': start_date,
+                    'end_date': end_date,
                     'email_address': email_address,
                     'generated_at': datetime.now(pytz.UTC)
                 }
@@ -251,6 +259,33 @@ class GmailAnalyzer:
         print(f"Slowest Response: {self.format_duration(stats['slowest_response'])}")
         
         print("\n" + "="*60)
+    
+    def analyze_multi_period(self) -> Dict:
+        """Analyze response times for 24h, 7d, and 28d periods."""
+        now = datetime.now(pytz.UTC)
+        
+        # Last 24 hours (previous day)
+        stats_24h_start = now - timedelta(hours=24)
+        stats_24h = self.analyze_response_times(start_date=stats_24h_start, end_date=now)
+        stats_24h['period_name'] = 'Last 24 Hours'
+        
+        # Last 7 days
+        stats_7d_start = now - timedelta(days=7)
+        stats_7d = self.analyze_response_times(start_date=stats_7d_start, end_date=now)
+        stats_7d['period_name'] = 'Last 7 Days'
+        
+        # Last 28 days
+        stats_28d_start = now - timedelta(days=28)
+        stats_28d = self.analyze_response_times(start_date=stats_28d_start, end_date=now)
+        stats_28d['period_name'] = 'Last 28 Days'
+        
+        return {
+            'last_24h': stats_24h,
+            'last_7d': stats_7d,
+            'last_28d': stats_28d,
+            'email_address': stats_24h.get('email_address', ''),
+            'generated_at': now
+        }
 
 
 def main():
