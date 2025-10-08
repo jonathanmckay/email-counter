@@ -20,7 +20,10 @@ class Config:
     REPORT_TIME = os.getenv('REPORT_TIME', '09:00')
     
     # Gmail API settings
-    SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+    SCOPES = [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send'
+    ]
     CREDENTIALS_FILE = 'credentials.json'
     TOKEN_FILE = 'token.json'
     
@@ -37,3 +40,4 @@ class Config:
             )
         
         return True
+

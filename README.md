@@ -100,3 +100,4 @@ This will generate a report and email it to the configured address.
 - The app only reads your email metadata (sender, timestamp, subject)
 - Email content is not analyzed or stored
 - All processing happens locally on your machine
+

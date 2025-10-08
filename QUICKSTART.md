@@ -144,3 +144,4 @@ The analyzer looks for:
 - Email content is NOT read or stored
 - All analysis happens on your computer
 - No data is sent to external servers (except Google's Gmail API)
+
