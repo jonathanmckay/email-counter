@@ -9,28 +9,46 @@ import pytz
 from gmail_analyzer import GmailAnalyzer
 from config import Config
 
+# Conditionally import OutlookAnalyzer
+if Config.OUTLOOK_ENABLED:
+    from outlook_analyzer import OutlookAnalyzer
+
 
 class EmailReporter:
     """Generates and sends email reports."""
     
     def __init__(self):
         """Initialize email reporter."""
-        self.analyzer = GmailAnalyzer()
+        self.gmail_analyzer = GmailAnalyzer()
+        self.outlook_analyzer = OutlookAnalyzer() if Config.OUTLOOK_ENABLED else None
     
-    def generate_html_report(self, multi_stats: dict) -> str:
-        """Generate HTML email report with 24h focus and rolling averages."""
-        stats_24h = multi_stats.get('last_24h', {})
-        stats_7d = multi_stats.get('last_7d', {})
-        stats_28d = multi_stats.get('last_28d', {})
+    def generate_html_report(self, gmail_stats: dict, outlook_stats: dict = None) -> str:
+        """Generate HTML email report with 24h focus and rolling averages.
         
-        if stats_24h.get('total_responses', 0) == 0:
+        Combines Gmail and Outlook stats with domain breakouts.
+        """
+        # Extract Gmail stats
+        gmail_24h = gmail_stats.get('last_24h', {})
+        gmail_7d = gmail_stats.get('last_7d', {})
+        gmail_28d = gmail_stats.get('last_28d', {})
+        
+        # Extract Outlook stats if available
+        outlook_24h = outlook_stats.get('last_24h', {}) if outlook_stats else {}
+        outlook_7d = outlook_stats.get('last_7d', {}) if outlook_stats else {}
+        outlook_28d = outlook_stats.get('last_28d', {}) if outlook_stats else {}
+        
+        # Calculate combined totals
+        combined_24h_total = gmail_24h.get('total_responses', 0) + outlook_24h.get('total_responses', 0)
+        combined_7d_total = gmail_7d.get('total_responses', 0) + outlook_7d.get('total_responses', 0)
+        combined_28d_total = gmail_28d.get('total_responses', 0) + outlook_28d.get('total_responses', 0)
+        
+        if combined_24h_total == 0:
             return f"""
             <html>
             <body style="font-family: Arial, sans-serif; padding: 20px;">
                 <h2>📧 Email Response Time Report</h2>
-                <p><strong>Email Account:</strong> {multi_stats.get('email_address', 'N/A')}</p>
                 <p><strong>Period:</strong> Last 24 Hours</p>
-                <p style="color: #666;">{stats_24h.get('message', 'No responses in the last 24 hours')}</p>
+                <p style="color: #666;">No responses in the last 24 hours</p>
                 <hr>
                 <p style="font-size: 12px; color: #999;">
                     Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -39,57 +57,127 @@ class EmailReporter:
             </html>
             """
         
-        # Calculate response time distribution for 24h
-        response_times_24h = stats_24h.get('response_details', [])
-        under_1h = sum(1 for rt in response_times_24h if rt['response_time'].total_seconds() < 3600)
-        under_24h = sum(1 for rt in response_times_24h if rt['response_time'].total_seconds() < 86400)
-        over_24h = sum(1 for rt in response_times_24h if rt['response_time'].total_seconds() >= 86400)
+        # Calculate combined response time distribution for 24h
+        gmail_response_times_24h = gmail_24h.get('response_details', [])
+        outlook_response_times_24h = outlook_24h.get('response_details', [])
+        all_response_times_24h = gmail_response_times_24h + outlook_response_times_24h
+        
+        combined_under_1h = sum(1 for rt in all_response_times_24h if rt['response_time'].total_seconds() < 3600)
+        combined_under_24h = sum(1 for rt in all_response_times_24h if rt['response_time'].total_seconds() < 86400)
+        combined_over_24h = sum(1 for rt in all_response_times_24h if rt['response_time'].total_seconds() >= 86400)
+        
+        # Calculate combined average for 24h
+        if all_response_times_24h:
+            combined_24h_avg_seconds = sum(rt['response_time'].total_seconds() for rt in all_response_times_24h) / len(all_response_times_24h)
+            combined_24h_avg_formatted = GmailAnalyzer.format_duration(combined_24h_avg_seconds)
+        else:
+            combined_24h_avg_formatted = "N/A"
         
         # Format period display
-        period_start = stats_24h.get('start_date')
-        period_end = stats_24h.get('end_date')
+        period_start = gmail_24h.get('start_date') or outlook_24h.get('start_date')
+        period_end = gmail_24h.get('end_date') or outlook_24h.get('end_date')
         period_display = f"{period_start.strftime('%b %d, %Y %I:%M %p')} - {period_end.strftime('%b %d, %I:%M %p UTC')}" if period_start and period_end else "Last 24 Hours"
+        
+        # Helper function to create account breakout HTML
+        def create_account_breakout(gmail_data, outlook_data, title):
+            html = f'<div class="account-breakouts"><h4>{title}</h4>'
+            
+            # Gmail section
+            if gmail_data.get('total_responses', 0) > 0:
+                domain = gmail_data.get('email_address', 'Gmail').split('@')[1] if '@' in gmail_data.get('email_address', '') else 'Gmail'
+                html += f'''
+                <div class="account-section">
+                    <div class="account-header">📧 {domain}</div>
+                    <div class="stat-row-small">
+                        <span class="stat-label">Responses</span>
+                        <span class="stat-value">{gmail_data['total_responses']}</span>
+                    </div>
+                    <div class="stat-row-small">
+                        <span class="stat-label">Average</span>
+                        <span class="stat-value">{gmail_data['avg_response_time_formatted']}</span>
+                    </div>
+                </div>
+                '''
+            
+            # Outlook section
+            if outlook_data and outlook_data.get('total_responses', 0) > 0:
+                domain = outlook_data.get('email_address', 'Outlook').split('@')[1] if '@' in outlook_data.get('email_address', '') else 'Outlook'
+                html += f'''
+                <div class="account-section">
+                    <div class="account-header">📧 {domain}</div>
+                    <div class="stat-row-small">
+                        <span class="stat-label">Responses</span>
+                        <span class="stat-value">{outlook_data['total_responses']}</span>
+                    </div>
+                    <div class="stat-row-small">
+                        <span class="stat-label">Average</span>
+                        <span class="stat-value">{outlook_data['avg_response_time_formatted']}</span>
+                    </div>
+                </div>
+                '''
+            
+            html += '</div>'
+            return html
+        
+        # Build 24h breakout
+        breakout_24h_html = create_account_breakout(gmail_24h, outlook_24h, "24-Hour Breakout")
         
         # Build rolling averages section
         rolling_averages_html = ""
-        if stats_7d.get('total_responses', 0) > 0 or stats_28d.get('total_responses', 0) > 0:
+        if combined_7d_total > 0 or combined_28d_total > 0:
             rolling_averages_html = '<div class="addendum"><h3>📊 Rolling Averages</h3>'
             
-            if stats_7d.get('total_responses', 0) > 0:
+            # 7-day rolling
+            if combined_7d_total > 0:
+                # Calculate combined 7d average
+                gmail_7d_responses = gmail_7d.get('response_details', [])
+                outlook_7d_responses = outlook_7d.get('response_details', [])
+                all_7d_responses = gmail_7d_responses + outlook_7d_responses
+                if all_7d_responses:
+                    combined_7d_avg_seconds = sum(rt['response_time'].total_seconds() for rt in all_7d_responses) / len(all_7d_responses)
+                    combined_7d_avg_formatted = GmailAnalyzer.format_duration(combined_7d_avg_seconds)
+                else:
+                    combined_7d_avg_formatted = "N/A"
+                
                 rolling_averages_html += f'''
                 <div class="rolling-period">
                     <div class="period-header">Last 7 Days</div>
                     <div class="stat-row">
                         <span class="stat-label">Total Responses</span>
-                        <span class="stat-value">{stats_7d['total_responses']}</span>
+                        <span class="stat-value">{combined_7d_total}</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Average Response Time</span>
-                        <span class="stat-value">{stats_7d['avg_response_time_formatted']}</span>
+                        <span class="stat-label">Combined Average</span>
+                        <span class="stat-value">{combined_7d_avg_formatted}</span>
                     </div>
-                    <div class="stat-row">
-                        <span class="stat-label">Median Response Time</span>
-                        <span class="stat-value">{stats_7d['median_response_time_formatted']}</span>
-                    </div>
+                    {create_account_breakout(gmail_7d, outlook_7d, "")}
                 </div>
                 '''
             
-            if stats_28d.get('total_responses', 0) > 0:
+            # 28-day rolling
+            if combined_28d_total > 0:
+                # Calculate combined 28d average
+                gmail_28d_responses = gmail_28d.get('response_details', [])
+                outlook_28d_responses = outlook_28d.get('response_details', [])
+                all_28d_responses = gmail_28d_responses + outlook_28d_responses
+                if all_28d_responses:
+                    combined_28d_avg_seconds = sum(rt['response_time'].total_seconds() for rt in all_28d_responses) / len(all_28d_responses)
+                    combined_28d_avg_formatted = GmailAnalyzer.format_duration(combined_28d_avg_seconds)
+                else:
+                    combined_28d_avg_formatted = "N/A"
+                
                 rolling_averages_html += f'''
                 <div class="rolling-period">
                     <div class="period-header">Last 28 Days</div>
                     <div class="stat-row">
                         <span class="stat-label">Total Responses</span>
-                        <span class="stat-value">{stats_28d['total_responses']}</span>
+                        <span class="stat-value">{combined_28d_total}</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Average Response Time</span>
-                        <span class="stat-value">{stats_28d['avg_response_time_formatted']}</span>
+                        <span class="stat-label">Combined Average</span>
+                        <span class="stat-value">{combined_28d_avg_formatted}</span>
                     </div>
-                    <div class="stat-row">
-                        <span class="stat-label">Median Response Time</span>
-                        <span class="stat-value">{stats_28d['median_response_time_formatted']}</span>
-                    </div>
+                    {create_account_breakout(gmail_28d, outlook_28d, "")}
                 </div>
                 '''
             
@@ -192,6 +280,36 @@ class EmailReporter:
                     margin-bottom: 10px;
                     font-size: 16px;
                 }}
+                .account-breakouts {{
+                    margin-top: 15px;
+                    padding: 10px;
+                    background-color: #f9f9f9;
+                    border-radius: 5px;
+                }}
+                .account-breakouts h4 {{
+                    margin: 0 0 10px 0;
+                    font-size: 14px;
+                    color: #7f8c8d;
+                }}
+                .account-section {{
+                    margin-bottom: 10px;
+                    padding: 10px;
+                    background-color: white;
+                    border-radius: 4px;
+                    border-left: 3px solid #3498db;
+                }}
+                .account-header {{
+                    font-weight: bold;
+                    color: #2c3e50;
+                    margin-bottom: 8px;
+                    font-size: 14px;
+                }}
+                .stat-row-small {{
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 5px 0;
+                    font-size: 13px;
+                }}
                 .footer {{
                     margin-top: 30px;
                     padding-top: 20px;
@@ -208,50 +326,36 @@ class EmailReporter:
                 <div class="subtitle">{period_display}</div>
                 
                 <div style="margin: 20px 0;">
-                    <p><strong>Email Account:</strong> {multi_stats['email_address']}</p>
-                    <p><strong>Responses Sent:</strong> {stats_24h['total_responses']}</p>
+                    <p><strong>Total Responses (24h):</strong> {combined_24h_total}</p>
                 </div>
                 
                 <div class="metric">
-                    <div class="metric-label">Average Response Time (24h)</div>
-                    <div class="metric-value">{stats_24h['avg_response_time_formatted']}</div>
+                    <div class="metric-label">Combined Average Response Time</div>
+                    <div class="metric-value">{combined_24h_avg_formatted}</div>
                 </div>
                 
-                <div class="stats">
-                    <div class="stat-row">
-                        <span class="stat-label">Median Response Time</span>
-                        <span class="stat-value">{stats_24h['median_response_time_formatted']}</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">Fastest Response</span>
-                        <span class="stat-value">{GmailAnalyzer.format_duration(stats_24h['fastest_response'])}</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">Slowest Response</span>
-                        <span class="stat-value">{GmailAnalyzer.format_duration(stats_24h['slowest_response'])}</span>
-                    </div>
-                </div>
+                {breakout_24h_html}
                 
                 <div class="distribution">
-                    <h3 style="margin-top: 0;">Response Time Distribution</h3>
+                    <h3 style="margin-top: 0;">Response Time Distribution (Combined)</h3>
                     <div class="stat-row">
                         <span class="stat-label">Under 1 hour</span>
-                        <span class="stat-value">{under_1h} ({under_1h*100//stats_24h['total_responses'] if stats_24h['total_responses'] > 0 else 0}%)</span>
+                        <span class="stat-value">{combined_under_1h} ({combined_under_1h*100//combined_24h_total if combined_24h_total > 0 else 0}%)</span>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">1-24 hours</span>
-                        <span class="stat-value">{under_24h - under_1h} ({(under_24h - under_1h)*100//stats_24h['total_responses'] if stats_24h['total_responses'] > 0 else 0}%)</span>
+                        <span class="stat-value">{combined_under_24h - combined_under_1h} ({(combined_under_24h - combined_under_1h)*100//combined_24h_total if combined_24h_total > 0 else 0}%)</span>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">Over 24 hours</span>
-                        <span class="stat-value">{over_24h} ({over_24h*100//stats_24h['total_responses'] if stats_24h['total_responses'] > 0 else 0}%)</span>
+                        <span class="stat-value">{combined_over_24h} ({combined_over_24h*100//combined_24h_total if combined_24h_total > 0 else 0}%)</span>
                     </div>
                 </div>
                 
                 {rolling_averages_html}
                 
                 <div class="footer">
-                    Generated on {multi_stats['generated_at'].strftime('%Y-%m-%d %H:%M:%S UTC')}<br>
+                    Generated on {datetime.now(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}<br>
                     Email Counter - Automated Response Time Tracking
                 </div>
             </div>
@@ -261,14 +365,14 @@ class EmailReporter:
         
         return html
     
-    def send_report_via_gmail(self, multi_stats: dict):
+    def send_report_via_gmail(self, gmail_stats: dict, outlook_stats: dict = None):
         """Send report using Gmail API (sends from authenticated account)."""
         import base64
         from email.mime.text import MIMEText
         
         # Create message
         subject = f"📊 Daily Email Response Report - {datetime.now().strftime('%Y-%m-%d')}"
-        html_body = self.generate_html_report(multi_stats)
+        html_body = self.generate_html_report(gmail_stats, outlook_stats)
         
         message = MIMEText(html_body, 'html')
         message['to'] = Config.REPORT_EMAIL
@@ -278,7 +382,7 @@ class EmailReporter:
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
         
         try:
-            sent_message = self.analyzer.service.users().messages().send(
+            sent_message = self.gmail_analyzer.service.users().messages().send(
                 userId='me',
                 body={'raw': raw_message}
             ).execute()
@@ -296,28 +400,50 @@ class EmailReporter:
         print(f"Generating daily email report...")
         print(f"Report will be sent to: {Config.REPORT_EMAIL}")
         
-        # Analyze emails for multiple periods
-        multi_stats = self.analyzer.analyze_multi_period()
+        # Analyze Gmail emails for multiple periods
+        print("\n--- Analyzing Gmail ---")
+        gmail_stats = self.gmail_analyzer.analyze_multi_period()
         
-        if not multi_stats:
-            print("✗ Failed to analyze emails")
+        if not gmail_stats:
+            print("✗ Failed to analyze Gmail emails")
             return False
         
+        # Analyze Outlook emails if enabled
+        outlook_stats = None
+        if Config.OUTLOOK_ENABLED and self.outlook_analyzer:
+            print("\n--- Analyzing Outlook ---")
+            outlook_stats = self.outlook_analyzer.analyze_multi_period()
+            if not outlook_stats:
+                print("⚠ Warning: Failed to analyze Outlook emails, continuing with Gmail only")
+        
         # Print summary to console
-        stats_24h = multi_stats.get('last_24h', {})
-        if stats_24h.get('total_responses', 0) > 0:
-            print(f"\n24h Summary: {stats_24h['total_responses']} responses, avg {stats_24h['avg_response_time_formatted']}")
+        print("\n" + "="*60)
+        print("COMBINED SUMMARY")
+        print("="*60)
         
-        stats_7d = multi_stats.get('last_7d', {})
-        if stats_7d.get('total_responses', 0) > 0:
-            print(f"7d Rolling: {stats_7d['total_responses']} responses, avg {stats_7d['avg_response_time_formatted']}")
+        gmail_24h = gmail_stats.get('last_24h', {})
+        outlook_24h = outlook_stats.get('last_24h', {}) if outlook_stats else {}
         
-        stats_28d = multi_stats.get('last_28d', {})
-        if stats_28d.get('total_responses', 0) > 0:
-            print(f"28d Rolling: {stats_28d['total_responses']} responses, avg {stats_28d['avg_response_time_formatted']}")
+        gmail_count = gmail_24h.get('total_responses', 0)
+        outlook_count = outlook_24h.get('total_responses', 0)
+        total_count = gmail_count + outlook_count
+        
+        print(f"\n24h Total: {total_count} responses")
+        if gmail_count > 0:
+            print(f"  Gmail: {gmail_count} responses, avg {gmail_24h['avg_response_time_formatted']}")
+        if outlook_count > 0:
+            print(f"  Outlook: {outlook_count} responses, avg {outlook_24h['avg_response_time_formatted']}")
+        
+        gmail_7d = gmail_stats.get('last_7d', {})
+        outlook_7d = outlook_stats.get('last_7d', {}) if outlook_stats else {}
+        print(f"\n7d Total: {gmail_7d.get('total_responses', 0) + outlook_7d.get('total_responses', 0)} responses")
+        
+        gmail_28d = gmail_stats.get('last_28d', {})
+        outlook_28d = outlook_stats.get('last_28d', {}) if outlook_stats else {}
+        print(f"28d Total: {gmail_28d.get('total_responses', 0) + outlook_28d.get('total_responses', 0)} responses")
         
         # Send via email
-        return self.send_report_via_gmail(multi_stats)
+        return self.send_report_via_gmail(gmail_stats, outlook_stats)
 
 
 def main():

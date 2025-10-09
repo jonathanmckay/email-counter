@@ -6,6 +6,10 @@ credentials.json
 token.pickle
 token.json
 
+# Outlook credentials
+outlook_token.json
+outlook_credentials.json
+
 # Python
 __pycache__/
 *.py[cod]
