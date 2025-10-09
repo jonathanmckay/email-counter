@@ -29,7 +29,16 @@ This guide will help you set up Outlook integration with the Email Counter app u
 - Platform: Select "Public client/native (mobile & desktop)"
 - Redirect URI: `http://localhost`
 
+
+-URL is Here: https://ms.portal.azure.com/#view/Microsoft_AAD_RegisteredApps/CreateApplicationBlade/quickStartType~/null/isMSAApp~/false -- **Need to work with Microsoft IT in order to get a Service TRee ID**
+
+
 Click **Register**
+
+
+
+
+
 
 ### 3. Note Your Application IDs
 
