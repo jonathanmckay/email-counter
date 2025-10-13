@@ -50,16 +50,50 @@ class GmailAnalyzer:
         # If no valid credentials, let user log in
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                try:
+                    print("Refreshing expired token...")
+                    creds.refresh(Request())
+                    print("✓ Token refreshed successfully")
+                    
+                    # Save refreshed credentials
+                    with open(Config.TOKEN_FILE, 'wb') as token:
+                        pickle.dump(creds, token)
+                except Exception as e:
+                    print(f"✗ Token refresh failed: {e}")
+                    # Check if we're in a non-interactive environment (GitHub Actions)
+                    if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+                        raise RuntimeError(
+                            "Token refresh failed in CI environment. "
+                            "Please regenerate tokens locally and update GitHub Secrets. "
+                            f"Error: {e}"
+                        )
+                    else:
+                        # In interactive environment, try to re-authenticate
+                        flow = InstalledAppFlow.from_client_secrets_file(
+                            Config.CREDENTIALS_FILE, Config.SCOPES
+                        )
+                        creds = flow.run_local_server(port=0)
+                        
+                        # Save credentials for next run
+                        with open(Config.TOKEN_FILE, 'wb') as token:
+                            pickle.dump(creds, token)
             else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    Config.CREDENTIALS_FILE, Config.SCOPES
-                )
-                creds = flow.run_local_server(port=0)
-            
-            # Save credentials for next run
-            with open(Config.TOKEN_FILE, 'wb') as token:
-                pickle.dump(creds, token)
+                # No refresh token available
+                if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
+                    raise RuntimeError(
+                        "No valid credentials available in CI environment. "
+                        "Please ensure GMAIL_TOKEN secret is set correctly with a valid refresh_token."
+                    )
+                else:
+                    # Interactive authentication
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        Config.CREDENTIALS_FILE, Config.SCOPES
+                    )
+                    creds = flow.run_local_server(port=0)
+                    
+                    # Save credentials for next run
+                    with open(Config.TOKEN_FILE, 'wb') as token:
+                        pickle.dump(creds, token)
         
         self.service = build('gmail', 'v1', credentials=creds)
         print("✓ Successfully authenticated with Gmail")
