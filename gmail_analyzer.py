@@ -36,20 +36,32 @@ class GmailAnalyzer:
             except (pickle.UnpicklingError, UnicodeDecodeError):
                 # If pickle fails, try loading as JSON (GitHub Actions format)
                 import json
+                from datetime import datetime as dt
                 with open(Config.TOKEN_FILE, 'r') as token:
                     token_data = json.load(token)
+                    
+                    # Parse expiry if present, otherwise set to None (will trigger refresh)
+                    expiry = None
+                    if token_data.get('expiry'):
+                        try:
+                            expiry = dt.fromisoformat(token_data['expiry'])
+                        except (ValueError, TypeError):
+                            expiry = None
+                    
                     creds = Credentials(
                         token=token_data.get('token'),
                         refresh_token=token_data.get('refresh_token'),
                         token_uri=token_data.get('token_uri'),
                         client_id=token_data.get('client_id'),
                         client_secret=token_data.get('client_secret'),
-                        scopes=token_data.get('scopes')
+                        scopes=token_data.get('scopes'),
+                        expiry=expiry
                     )
         
         # If no valid credentials, let user log in
         if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
+            # Try to refresh if we have a refresh token (don't rely on expired flag)
+            if creds and creds.refresh_token:
                 try:
                     print("Refreshing expired token...")
                     creds.refresh(Request())

@@ -36,3 +36,4 @@ Thumbs.db
 reports/
 *.log
 
+token_for_github.json
