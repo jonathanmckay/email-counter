@@ -27,10 +27,25 @@ class GmailAnalyzer:
         """Authenticate with Gmail API."""
         creds = None
         
-        # Load existing token
+        # Load existing token (support both pickle and JSON formats)
         if os.path.exists(Config.TOKEN_FILE):
-            with open(Config.TOKEN_FILE, 'rb') as token:
-                creds = pickle.load(token)
+            try:
+                # Try loading as pickle first (local format)
+                with open(Config.TOKEN_FILE, 'rb') as token:
+                    creds = pickle.load(token)
+            except (pickle.UnpicklingError, UnicodeDecodeError):
+                # If pickle fails, try loading as JSON (GitHub Actions format)
+                import json
+                with open(Config.TOKEN_FILE, 'r') as token:
+                    token_data = json.load(token)
+                    creds = Credentials(
+                        token=token_data.get('token'),
+                        refresh_token=token_data.get('refresh_token'),
+                        token_uri=token_data.get('token_uri'),
+                        client_id=token_data.get('client_id'),
+                        client_secret=token_data.get('client_secret'),
+                        scopes=token_data.get('scopes')
+                    )
         
         # If no valid credentials, let user log in
         if not creds or not creds.valid:
