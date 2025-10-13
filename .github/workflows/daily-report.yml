@@ -1,0 +1,61 @@
+name: Daily Email Report
+
+on:
+  schedule:
+    # Run daily at 5:30 AM UTC (adjust timezone as needed)
+    - cron: '30 5 * * *'
+  workflow_dispatch:  # Allow manual triggering for testing
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Create credentials and tokens from secrets
+      run: |
+        # Create Gmail credentials
+        echo '${{ secrets.GMAIL_CREDENTIALS }}' > credentials.json
+        echo '${{ secrets.GMAIL_TOKEN }}' > token.json
+        
+        # Create Outlook token if enabled
+        if [ "${{ secrets.OUTLOOK_ENABLED }}" = "true" ]; then
+          echo '${{ secrets.OUTLOOK_TOKEN }}' > outlook_token.json
+        fi
+    
+    - name: Create .env file
+      run: |
+        cat > .env << EOF
+        REPORT_EMAIL=${{ secrets.REPORT_EMAIL }}
+        GMAIL_ADDRESS=${{ secrets.GMAIL_ADDRESS }}
+        ANALYSIS_DAYS=30
+        REPORT_TIME=05:30
+        OUTLOOK_ENABLED=${{ secrets.OUTLOOK_ENABLED }}
+        OUTLOOK_CLIENT_ID=${{ secrets.OUTLOOK_CLIENT_ID }}
+        OUTLOOK_TENANT_ID=${{ secrets.OUTLOOK_TENANT_ID }}
+        EOF
+    
+    - name: Run email reporter
+      run: |
+        python email_reporter.py
+    
+    - name: Update tokens if refreshed
+      if: always()
+      run: |
+        # Save potentially refreshed tokens back to the workflow
+        # Note: This won't persist across runs - tokens must be long-lived
+        # or you need to manually update secrets when they expire
+        echo "Tokens may have been refreshed during execution"
+

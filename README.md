@@ -6,11 +6,11 @@ A tool to track email response times and generate daily reports.
 
 - Tracks average email response time for emails you've responded to
 - Sends daily reports via email
+- Runs automatically in the cloud (GitHub Actions) or locally
 - Currently supports:
   - Gmail (personal accounts)
-- Planned support:
-  - Outlook
-  - Work-managed Gmail accounts
+  - Microsoft 365 / Outlook (work accounts)
+- Combined reports showing breakouts by email domain
 
 ## Setup
 
@@ -50,14 +50,25 @@ On first run, you'll be prompted to authorize the application in your browser.
 
 ### 5. Schedule Daily Reports
 
-To run daily reports automatically, add to your crontab:
+#### Option A: GitHub Actions (Recommended - Free Cloud Execution)
+
+Run automatically in the cloud for free using GitHub Actions:
+
+1. See [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md) for detailed instructions
+2. Set up GitHub Secrets with your tokens
+3. The workflow runs daily at 5:30 AM UTC
+4. No need to keep your computer on!
+
+#### Option B: Local Execution (macOS)
+
+To run on your Mac using launchd:
 
 ```bash
-# Run daily at 9 AM
-0 9 * * * cd /path/to/email-counter && ./venv/bin/python email_reporter.py
+python setup_scheduler.py
+launchctl load ~/Library/LaunchAgents/com.emailcounter.dailyreport.plist
 ```
 
-Or use the system scheduler on your OS (Task Scheduler on Windows, launchd on macOS).
+See documentation for other platforms (cron on Linux, Task Scheduler on Windows).
 
 ## Usage
 
