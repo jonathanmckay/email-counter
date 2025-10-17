@@ -34,6 +34,11 @@ jobs:
         if [ "${{ secrets.OUTLOOK_ENABLED }}" = "true" ]; then
           echo '${{ secrets.OUTLOOK_TOKEN }}' > outlook_token.json
         fi
+        
+        # Create Messages gist ID if provided
+        if [ -n "${{ secrets.MESSAGES_GIST_ID }}" ]; then
+          echo '${{ secrets.MESSAGES_GIST_ID }}' > .messages_gist_id
+        fi
     
     - name: Create .env file
       run: |

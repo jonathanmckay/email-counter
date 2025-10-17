@@ -4,13 +4,14 @@ A tool to track email response times and generate daily reports.
 
 ## Features
 
-- Tracks average email response time for emails you've responded to
+- Tracks average response time for messages you've responded to
 - Sends daily reports via email
-- Runs automatically in the cloud (GitHub Actions) or locally
+- Runs automatically in the cloud (GitHub Actions) with hybrid Mac client
 - Currently supports:
-  - Gmail (personal accounts)
-  - Microsoft 365 / Outlook (work accounts)
-- Combined reports showing breakouts by email domain
+  - **Gmail** (personal accounts)
+  - **Microsoft 365 / Outlook** (work accounts)
+  - **Apple Messages** (iMessage & SMS via Mac client)
+- Combined reports showing breakouts by platform (Messages, Gmail, Outlook)
 
 ## Setup
 
@@ -48,7 +49,30 @@ python gmail_analyzer.py
 
 On first run, you'll be prompted to authorize the application in your browser.
 
-### 5. Schedule Daily Reports
+### 5. Apple Messages Setup (Optional)
+
+To include iMessage/SMS response times in your reports:
+
+1. See [MESSAGES_SETUP.md](MESSAGES_SETUP.md) for detailed setup instructions
+2. The Mac client runs locally and uploads stats to a private GitHub Gist
+3. The GitHub Actions server downloads and combines with email stats
+4. Requires:
+   - Mac with Full Disk Access for Terminal/VS Code
+   - GitHub Personal Access Token (with `gist` scope)
+   - launchd scheduler to run daily
+
+### 6. Outlook/M365 Setup (Optional)
+
+To include Microsoft 365/Outlook response times:
+
+1. See [OUTLOOK_SETUP.md](OUTLOOK_SETUP.md) for Azure AD app registration
+2. Requires IT assistance for Service Tree ID
+3. Set environment variables:
+   - `OUTLOOK_ENABLED=true`
+   - `OUTLOOK_CLIENT_ID=your_client_id`
+   - `OUTLOOK_TENANT_ID=your_tenant_id`
+
+### 7. Schedule Daily Reports
 
 #### Option A: GitHub Actions (Recommended - Free Cloud Execution)
 

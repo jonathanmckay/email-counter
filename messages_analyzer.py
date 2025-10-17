@@ -131,25 +131,44 @@ class MessagesAnalyzer:
                 # Sort by date
                 chat_messages.sort(key=lambda m: m['date'])
                 
-                # Find response pairs: received message followed by sent message
-                for i in range(len(chat_messages) - 1):
-                    current_msg = chat_messages[i]
-                    next_msg = chat_messages[i + 1]
-                    
-                    # Check if current is received and next is sent
-                    if not current_msg['is_from_me'] and next_msg['is_from_me']:
+                # Find response pairs: received message(s) followed by sent message(s)
+                # We track the last received message and first sent message after it
+                last_received = None
+                
+                for i, msg in enumerate(chat_messages):
+                    if not msg['is_from_me']:
+                        # This is a received message - update our "last received" marker
+                        last_received = msg
+                    elif msg['is_from_me'] and last_received:
+                        # This is a sent message and we have a received message to respond to
+                        # Only count if this is the FIRST sent message after received message(s)
+                        # Check if previous message was from me (skip if so, already counted)
+                        if i > 0 and chat_messages[i-1]['is_from_me']:
+                            continue  # Skip - this is a follow-up message, not initial response
+                        
                         # Only count if response was sent in our target date range
-                        if start_date <= next_msg['date'] <= end_date:
-                            response_time = next_msg['date'] - current_msg['date']
+                        if start_date <= msg['date'] <= end_date:
+                            response_time = msg['date'] - last_received['date']
+                            
+                            # Sanity check: ignore responses that seem unreasonably fast or slow
+                            # (likely indicates conversation gaps, not actual responses)
+                            response_seconds = response_time.total_seconds()
+                            if response_seconds < 1:  # Less than 1 second - likely sync issue
+                                continue
+                            if response_seconds > 7 * 24 * 3600:  # More than 7 days - different conversation
+                                continue
                             
                             response_times.append({
-                                'received': current_msg['date'],
-                                'sent': next_msg['date'],
+                                'received': last_received['date'],
+                                'sent': msg['date'],
                                 'response_time': response_time,
-                                'contact': current_msg['contact'],
-                                'display_name': current_msg['display_name'],
-                                'service': current_msg['service']
+                                'contact': last_received['contact'],
+                                'display_name': last_received['display_name'],
+                                'service': last_received['service']
                             })
+                        
+                        # Clear last_received so we don't double-count
+                        last_received = None
             
             print(f"Found {len(response_times)} responses")
             

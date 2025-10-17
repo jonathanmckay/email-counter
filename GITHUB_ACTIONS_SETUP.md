@@ -67,6 +67,14 @@ cat outlook_token.json | pbcopy
 | `OUTLOOK_CLIENT_ID` | Your Azure AD Client ID |
 | `OUTLOOK_TENANT_ID` | Your Azure AD Tenant ID |
 
+#### Optional (for Messages/iMessage):
+
+| Secret Name | Value | How to Get It |
+|-------------|-------|---------------|
+| `MESSAGES_GIST_ID` | Your GitHub Gist ID | Run Messages client first (see MESSAGES_SETUP.md), then `cat .messages_gist_id` |
+
+**Note:** The Messages client must be set up and running on your Mac separately. The GitHub Actions workflow will download the stats from your private Gist.
+
 ### 4. Adjust Timezone (Optional)
 
 The workflow runs at 5:30 AM **UTC** by default. To adjust for your timezone:
