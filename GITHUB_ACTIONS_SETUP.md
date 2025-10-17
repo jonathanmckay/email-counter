@@ -181,3 +181,5 @@ If you want to switch back to running on your Mac:
    launchctl load ~/Library/LaunchAgents/com.emailcounter.dailyreport.plist
    ```
 
+
+

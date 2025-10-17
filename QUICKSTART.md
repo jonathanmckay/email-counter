@@ -145,3 +145,4 @@ The analyzer looks for:
 - All analysis happens on your computer
 - No data is sent to external servers (except Google's Gmail API)
 
+

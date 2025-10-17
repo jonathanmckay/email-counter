@@ -36,4 +36,7 @@ Thumbs.db
 reports/
 *.log
 
+# Messages client
+.messages_gist_id
+
 token_for_github.json
