@@ -47,6 +47,7 @@ class MessagesAnalyzer:
         cursor = conn.cursor()
         
         # Query messages with chat and handle information
+        # Includes both text messages and reactions (associated_message_guid)
         query = """
         SELECT 
             m.ROWID,
@@ -59,14 +60,15 @@ class MessagesAnalyzer:
             c.chat_identifier,
             c.service_name,
             h.id as handle_id,
-            c.display_name
+            c.display_name,
+            m.associated_message_guid,
+            m.associated_message_type
         FROM message m
         JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
         JOIN chat c ON cmj.chat_id = c.ROWID
         LEFT JOIN handle h ON m.handle_id = h.ROWID
         WHERE m.date >= ? AND m.date <= ?
-        AND m.text IS NOT NULL
-        AND m.text != ''
+        AND m.date > 0
         ORDER BY c.chat_identifier, m.date ASC
         """
         
@@ -76,10 +78,28 @@ class MessagesAnalyzer:
         for row in cursor.fetchall():
             msg_date = self.convert_mac_timestamp(row[3])
             
+            # Check if this is a reaction
+            is_reaction = row[11] is not None  # associated_message_guid
+            reaction_type = row[12] if is_reaction else None
+            
+            # Determine message type for display
+            if is_reaction:
+                reaction_names = {
+                    2000: 'Loved',
+                    2001: 'Liked', 
+                    2002: 'Disliked',
+                    2003: 'Laughed',
+                    2004: 'Emphasized',
+                    2005: 'Questioned'
+                }
+                text = reaction_names.get(reaction_type, f'Reacted ({reaction_type})')
+            else:
+                text = row[2][:100] if row[2] else ''  # Truncate for privacy
+            
             messages.append({
                 'id': row[0],
                 'guid': row[1],
-                'text': row[2][:100] if row[2] else '',  # Truncate for privacy
+                'text': text,
                 'date': msg_date,
                 'date_read': self.convert_mac_timestamp(row[4]),
                 'is_from_me': bool(row[5]),
@@ -87,7 +107,9 @@ class MessagesAnalyzer:
                 'chat_id': row[7],
                 'service': row[8],  # iMessage or SMS
                 'contact': row[9] or row[7],  # Handle ID or chat identifier
-                'display_name': row[10]
+                'display_name': row[10],
+                'is_reaction': is_reaction,
+                'reaction_type': reaction_type
             })
         
         conn.close()
