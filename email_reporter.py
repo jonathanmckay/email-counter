@@ -3,7 +3,7 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 from gmail_analyzer import GmailAnalyzer
@@ -127,10 +127,18 @@ class EmailReporter:
         else:
             combined_24h_avg_formatted = "N/A"
         
-        # Format period display
-        period_start = gmail_24h.get('start_date') or outlook_24h.get('start_date')
-        period_end = gmail_24h.get('end_date') or outlook_24h.get('end_date')
-        period_display = f"{period_start.strftime('%b %d, %Y %I:%M %p')} - {period_end.strftime('%b %d, %I:%M %p UTC')}" if period_start and period_end else "Last 24 Hours"
+        # Format period display - convert to Pacific Time for display
+        pacific = pytz.timezone('America/Los_Angeles')
+        period_start = gmail_24h.get('start_date') or outlook_24h.get('start_date') or messages_24h.get('start_date')
+        period_end = gmail_24h.get('end_date') or outlook_24h.get('end_date') or messages_24h.get('end_date')
+        
+        if period_start and period_end:
+            # Convert to PT for display
+            period_start_pt = period_start.astimezone(pacific)
+            period_end_pt = period_end.astimezone(pacific)
+            period_display = f"{period_start_pt.strftime('%A, %B %d, %Y')} (Pacific Time)"
+        else:
+            period_display = "Previous Day"
         
         # Helper function to create account breakout HTML
         def create_account_breakout(gmail_data, outlook_data, messages_data, title):
@@ -192,8 +200,8 @@ class EmailReporter:
             html += '</div>'
             return html
         
-        # Build 24h breakout
-        breakout_24h_html = create_account_breakout(gmail_24h, outlook_24h, messages_24h, "24-Hour Breakout")
+        # Build previous day breakout
+        breakout_24h_html = create_account_breakout(gmail_24h, outlook_24h, messages_24h, "Previous Day Breakout")
         
         # Build rolling averages section
         rolling_averages_html = ""
@@ -397,11 +405,11 @@ class EmailReporter:
         </head>
         <body>
             <div class="container">
-                <h2>📧 Daily Email Response Report</h2>
+                <h2>📧 Daily Response Report</h2>
                 <div class="subtitle">{period_display}</div>
                 
                 <div style="margin: 20px 0;">
-                    <p><strong>Total Responses (24h):</strong> {combined_24h_total}</p>
+                    <p><strong>Total Responses:</strong> {combined_24h_total}</p>
                 </div>
                 
                 <div class="metric">
@@ -445,8 +453,12 @@ class EmailReporter:
         import base64
         from email.mime.text import MIMEText
         
-        # Create message
-        subject = f"📊 Daily Email Response Report - {datetime.now().strftime('%Y-%m-%d')}"
+        # Create message with previous day's date in PT
+        pacific = pytz.timezone('America/Los_Angeles')
+        now_pt = datetime.now(pytz.UTC).astimezone(pacific)
+        yesterday_pt = now_pt - timedelta(days=1)
+        
+        subject = f"📊 Daily Response Report - {yesterday_pt.strftime('%A, %b %d, %Y')}"
         html_body = self.generate_html_report(gmail_stats, outlook_stats, messages_stats)
         
         message = MIMEText(html_body, 'html')
@@ -513,7 +525,12 @@ class EmailReporter:
         messages_count = messages_24h.get('total_responses', 0)
         total_count = gmail_count + outlook_count + messages_count
         
-        print(f"\n24h Total: {total_count} responses")
+        # Get the date we're reporting on in PT
+        pacific = pytz.timezone('America/Los_Angeles')
+        yesterday_pt = datetime.now(pytz.UTC).astimezone(pacific) - timedelta(days=1)
+        date_str = yesterday_pt.strftime('%A, %b %d, %Y')
+        
+        print(f"\nPrevious Day ({date_str}): {total_count} responses")
         if messages_count > 0:
             print(f"  Messages: {messages_count} responses, avg {messages_24h['avg_response_time_formatted']}")
         if gmail_count > 0:

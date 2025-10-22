@@ -261,22 +261,33 @@ class MessagesAnalyzer:
             return f"{days} day{'s' if days != 1 else ''} {hours} hour{'s' if hours != 1 else ''}"
     
     def analyze_multi_period(self) -> Dict:
-        """Analyze response times for 24h, 7d, and 28d periods."""
-        now = datetime.now(pytz.UTC)
+        """Analyze response times for previous calendar day (PT), 7d, and 28d periods."""
+        now_utc = datetime.now(pytz.UTC)
         
-        # Last 24 hours
-        stats_24h_start = now - timedelta(hours=24)
-        stats_24h = self.analyze_response_times(start_date=stats_24h_start, end_date=now)
-        stats_24h['period_name'] = 'Last 24 Hours'
+        # Convert to Pacific Time to get the previous calendar day
+        pacific = pytz.timezone('America/Los_Angeles')
+        now_pt = now_utc.astimezone(pacific)
         
-        # Last 7 days
-        stats_7d_start = now - timedelta(days=7)
-        stats_7d = self.analyze_response_times(start_date=stats_7d_start, end_date=now)
+        # Previous calendar day in PT (yesterday 00:00:00 to 23:59:59 PT)
+        yesterday_pt = now_pt - timedelta(days=1)
+        stats_24h_start = yesterday_pt.replace(hour=0, minute=0, second=0, microsecond=0)
+        stats_24h_end = yesterday_pt.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Convert back to UTC for the analysis
+        stats_24h_start_utc = stats_24h_start.astimezone(pytz.UTC)
+        stats_24h_end_utc = stats_24h_end.astimezone(pytz.UTC)
+        
+        stats_24h = self.analyze_response_times(start_date=stats_24h_start_utc, end_date=stats_24h_end_utc)
+        stats_24h['period_name'] = f'Previous Day ({yesterday_pt.strftime("%Y-%m-%d")} PT)'
+        
+        # Last 7 days (rolling)
+        stats_7d_start = now_utc - timedelta(days=7)
+        stats_7d = self.analyze_response_times(start_date=stats_7d_start, end_date=now_utc)
         stats_7d['period_name'] = 'Last 7 Days'
         
-        # Last 28 days
-        stats_28d_start = now - timedelta(days=28)
-        stats_28d = self.analyze_response_times(start_date=stats_28d_start, end_date=now)
+        # Last 28 days (rolling)
+        stats_28d_start = now_utc - timedelta(days=28)
+        stats_28d = self.analyze_response_times(start_date=stats_28d_start, end_date=now_utc)
         stats_28d['period_name'] = 'Last 28 Days'
         
         return {
