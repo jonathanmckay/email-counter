@@ -19,13 +19,22 @@ class Config:
     # Report settings
     REPORT_TIME = os.getenv('REPORT_TIME', '05:30')
     
-    # Gmail API settings
+    # Gmail API settings (Work Gmail - m5c7.com)
     SCOPES = [
         'https://www.googleapis.com/auth/gmail.readonly',
         'https://www.googleapis.com/auth/gmail.send'
     ]
     CREDENTIALS_FILE = 'credentials.json'
     TOKEN_FILE = 'token.json'
+    
+    # Personal Gmail settings
+    PERSONAL_GMAIL_ENABLED = os.getenv('PERSONAL_GMAIL_ENABLED', 'false').lower() == 'true'
+    PERSONAL_GMAIL_CREDENTIALS_FILE = 'personal_gmail_credentials.json'
+    PERSONAL_GMAIL_TOKEN_FILE = 'personal_gmail_token.json'
+    
+    # Todoist settings
+    TODOIST_ENABLED = os.getenv('TODOIST_ENABLED', 'false').lower() == 'true'
+    TODOIST_API_TOKEN = os.getenv('TODOIST_API_TOKEN', '')
     
     # Outlook/Microsoft 365 settings
     OUTLOOK_ENABLED = os.getenv('OUTLOOK_ENABLED', 'false').lower() == 'true'

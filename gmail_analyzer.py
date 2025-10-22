@@ -18,9 +18,18 @@ from config import Config
 class GmailAnalyzer:
     """Analyzes Gmail for email response times."""
     
-    def __init__(self):
-        """Initialize Gmail analyzer."""
+    def __init__(self, credentials_file: str = None, token_file: str = None, account_name: str = "Gmail"):
+        """Initialize Gmail analyzer.
+        
+        Args:
+            credentials_file: Path to credentials.json (default: Config.CREDENTIALS_FILE)
+            token_file: Path to token file (default: Config.TOKEN_FILE)
+            account_name: Display name for this account (e.g., "Work Gmail", "Personal Gmail")
+        """
         self.service = None
+        self.credentials_file = credentials_file or Config.CREDENTIALS_FILE
+        self.token_file = token_file or Config.TOKEN_FILE
+        self.account_name = account_name
         self.authenticate()
     
     def authenticate(self):
@@ -28,16 +37,16 @@ class GmailAnalyzer:
         creds = None
         
         # Load existing token (support both pickle and JSON formats)
-        if os.path.exists(Config.TOKEN_FILE):
+        if os.path.exists(self.token_file):
             try:
                 # Try loading as pickle first (local format)
-                with open(Config.TOKEN_FILE, 'rb') as token:
+                with open(self.token_file, 'rb') as token:
                     creds = pickle.load(token)
             except (pickle.UnpicklingError, UnicodeDecodeError):
                 # If pickle fails, try loading as JSON (GitHub Actions format)
                 import json
                 from datetime import datetime as dt
-                with open(Config.TOKEN_FILE, 'r') as token:
+                with open(self.token_file, 'r') as token:
                     token_data = json.load(token)
                     
                     # Parse expiry if present, otherwise set to None (will trigger refresh)
@@ -68,7 +77,7 @@ class GmailAnalyzer:
                     print("✓ Token refreshed successfully")
                     
                     # Save refreshed credentials
-                    with open(Config.TOKEN_FILE, 'wb') as token:
+                    with open(self.token_file, 'wb') as token:
                         pickle.dump(creds, token)
                 except Exception as e:
                     print(f"✗ Token refresh failed: {e}")
@@ -82,29 +91,29 @@ class GmailAnalyzer:
                     else:
                         # In interactive environment, try to re-authenticate
                         flow = InstalledAppFlow.from_client_secrets_file(
-                            Config.CREDENTIALS_FILE, Config.SCOPES
+                            self.credentials_file, Config.SCOPES
                         )
                         creds = flow.run_local_server(port=0)
                         
                         # Save credentials for next run
-                        with open(Config.TOKEN_FILE, 'wb') as token:
+                        with open(self.token_file, 'wb') as token:
                             pickle.dump(creds, token)
             else:
                 # No refresh token available
                 if os.getenv('CI') or os.getenv('GITHUB_ACTIONS'):
                     raise RuntimeError(
-                        "No valid credentials available in CI environment. "
+                        f"No valid credentials available in CI environment for {self.account_name}. "
                         "Please ensure GMAIL_TOKEN secret is set correctly with a valid refresh_token."
                     )
                 else:
                     # Interactive authentication
                     flow = InstalledAppFlow.from_client_secrets_file(
-                        Config.CREDENTIALS_FILE, Config.SCOPES
+                        self.credentials_file, Config.SCOPES
                     )
                     creds = flow.run_local_server(port=0)
                     
                     # Save credentials for next run
-                    with open(Config.TOKEN_FILE, 'wb') as token:
+                    with open(self.token_file, 'wb') as token:
                         pickle.dump(creds, token)
         
         self.service = build('gmail', 'v1', credentials=creds)

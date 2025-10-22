@@ -1,10 +1,14 @@
 # Environment variables
 .env
 
-# Gmail credentials
+# Gmail credentials (Work)
 credentials.json
 token.pickle
 token.json
+
+# Gmail credentials (Personal)
+personal_gmail_credentials.json
+personal_gmail_token.json
 
 # Outlook credentials
 outlook_token.json

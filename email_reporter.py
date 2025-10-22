@@ -15,14 +15,35 @@ import json
 if Config.OUTLOOK_ENABLED:
     from outlook_analyzer import OutlookAnalyzer
 
+# Conditionally import TodoistAnalyzer
+if Config.TODOIST_ENABLED:
+    from todoist_analyzer import TodoistAnalyzer
+
 
 class EmailReporter:
     """Generates and sends email reports."""
     
     def __init__(self):
         """Initialize email reporter."""
-        self.gmail_analyzer = GmailAnalyzer()
+        # Work Gmail (m5c7.com)
+        self.gmail_analyzer = GmailAnalyzer(account_name="Work Gmail (m5c7.com)")
+        
+        # Personal Gmail (if enabled)
+        self.personal_gmail_analyzer = None
+        if Config.PERSONAL_GMAIL_ENABLED:
+            self.personal_gmail_analyzer = GmailAnalyzer(
+                credentials_file=Config.PERSONAL_GMAIL_CREDENTIALS_FILE,
+                token_file=Config.PERSONAL_GMAIL_TOKEN_FILE,
+                account_name="Personal Gmail"
+            )
+        
+        # Outlook (if enabled)
         self.outlook_analyzer = OutlookAnalyzer() if Config.OUTLOOK_ENABLED else None
+        
+        # Todoist (if enabled)
+        self.todoist_analyzer = TodoistAnalyzer() if Config.TODOIST_ENABLED else None
+        
+        # Messages (if gist ID exists)
         self.messages_gist_id = self._load_messages_gist_id()
     
     def _load_messages_gist_id(self) -> str:
@@ -64,10 +85,10 @@ class EmailReporter:
             print(f"⚠ Error downloading Messages stats: {e}")
             return None
     
-    def generate_html_report(self, gmail_stats: dict, outlook_stats: dict = None, messages_stats: dict = None) -> str:
+    def generate_html_report(self, gmail_stats: dict, personal_gmail_stats: dict = None, outlook_stats: dict = None, messages_stats: dict = None, todoist_stats: dict = None) -> str:
         """Generate HTML email report with 24h focus and rolling averages.
         
-        Combines Gmail, Outlook, and Messages stats with domain breakouts.
+        Combines Work Gmail, Personal Gmail, Outlook, Messages, and Todoist stats with breakouts.
         """
         # Extract Gmail stats
         gmail_24h = gmail_stats.get('last_24h', {})
@@ -448,7 +469,7 @@ class EmailReporter:
         
         return html
     
-    def send_report_via_gmail(self, gmail_stats: dict, outlook_stats: dict = None, messages_stats: dict = None):
+    def send_report_via_gmail(self, gmail_stats: dict, personal_gmail_stats: dict = None, outlook_stats: dict = None, messages_stats: dict = None, todoist_stats: dict = None):
         """Send report using Gmail API (sends from authenticated account)."""
         import base64
         from email.mime.text import MIMEText
@@ -459,7 +480,7 @@ class EmailReporter:
         yesterday_pt = now_pt - timedelta(days=1)
         
         subject = f"📊 Daily Response Report - {yesterday_pt.strftime('%A, %b %d, %Y')}"
-        html_body = self.generate_html_report(gmail_stats, outlook_stats, messages_stats)
+        html_body = self.generate_html_report(gmail_stats, personal_gmail_stats, outlook_stats, messages_stats, todoist_stats)
         
         message = MIMEText(html_body, 'html')
         message['to'] = Config.REPORT_EMAIL
@@ -484,16 +505,25 @@ class EmailReporter:
     
     def generate_and_send_report(self):
         """Generate analysis and send report."""
-        print(f"Generating daily email report...")
+        print(f"Generating daily report...")
         print(f"Report will be sent to: {Config.REPORT_EMAIL}")
         
-        # Analyze Gmail emails for multiple periods
-        print("\n--- Analyzing Gmail ---")
+        # Analyze Work Gmail
+        print("\n--- Analyzing Work Gmail (m5c7.com) ---")
         gmail_stats = self.gmail_analyzer.analyze_multi_period()
         
         if not gmail_stats:
-            print("✗ Failed to analyze Gmail emails")
+            print("✗ Failed to analyze work Gmail")
             return False
+        
+        # Analyze Personal Gmail if enabled
+        personal_gmail_stats = None
+        if Config.PERSONAL_GMAIL_ENABLED and self.personal_gmail_analyzer:
+            print("\n--- Analyzing Personal Gmail ---")
+            try:
+                personal_gmail_stats = self.personal_gmail_analyzer.analyze_multi_period()
+            except Exception as e:
+                print(f"⚠ Warning: Failed to analyze personal Gmail: {e}")
         
         # Analyze Outlook emails if enabled
         outlook_stats = None
@@ -501,7 +531,7 @@ class EmailReporter:
             print("\n--- Analyzing Outlook ---")
             outlook_stats = self.outlook_analyzer.analyze_multi_period()
             if not outlook_stats:
-                print("⚠ Warning: Failed to analyze Outlook emails, continuing with Gmail only")
+                print("⚠ Warning: Failed to analyze Outlook emails")
         
         # Download Messages stats from Gist
         messages_stats = None
@@ -509,47 +539,62 @@ class EmailReporter:
             print("\n--- Downloading Messages Stats ---")
             messages_stats = self.download_messages_stats()
             if not messages_stats:
-                print("⚠ Warning: Failed to download Messages stats, continuing without Messages")
+                print("⚠ Warning: Failed to download Messages stats")
+        
+        # Analyze Todoist if enabled
+        todoist_stats = None
+        if Config.TODOIST_ENABLED and self.todoist_analyzer:
+            print("\n--- Analyzing Todoist Tasks ---")
+            try:
+                todoist_stats = self.todoist_analyzer.analyze_multi_period()
+            except Exception as e:
+                print(f"⚠ Warning: Failed to analyze Todoist: {e}")
         
         # Print summary to console
         print("\n" + "="*60)
         print("COMBINED SUMMARY")
         print("="*60)
         
-        gmail_24h = gmail_stats.get('last_24h', {})
-        outlook_24h = outlook_stats.get('last_24h', {}) if outlook_stats else {}
-        messages_24h = messages_stats.get('last_24h', {}) if messages_stats else {}
-        
-        gmail_count = gmail_24h.get('total_responses', 0)
-        outlook_count = outlook_24h.get('total_responses', 0)
-        messages_count = messages_24h.get('total_responses', 0)
-        total_count = gmail_count + outlook_count + messages_count
-        
         # Get the date we're reporting on in PT
         pacific = pytz.timezone('America/Los_Angeles')
         yesterday_pt = datetime.now(pytz.UTC).astimezone(pacific) - timedelta(days=1)
         date_str = yesterday_pt.strftime('%A, %b %d, %Y')
         
-        print(f"\nPrevious Day ({date_str}): {total_count} responses")
+        # Extract 24h stats
+        gmail_24h = gmail_stats.get('last_24h', {})
+        personal_gmail_24h = personal_gmail_stats.get('last_24h', {}) if personal_gmail_stats else {}
+        outlook_24h = outlook_stats.get('last_24h', {}) if outlook_stats else {}
+        messages_24h = messages_stats.get('last_24h', {}) if messages_stats else {}
+        todoist_24h = todoist_stats.get('last_24h', {}) if todoist_stats else {}
+        
+        # Count responses
+        gmail_count = gmail_24h.get('total_responses', 0)
+        personal_gmail_count = personal_gmail_24h.get('total_responses', 0)
+        outlook_count = outlook_24h.get('total_responses', 0)
+        messages_count = messages_24h.get('total_responses', 0)
+        total_count = gmail_count + personal_gmail_count + outlook_count + messages_count
+        
+        print(f"\n📧 COMMUNICATION RESPONSES - Previous Day ({date_str}): {total_count} total")
         if messages_count > 0:
-            print(f"  Messages: {messages_count} responses, avg {messages_24h['avg_response_time_formatted']}")
+            print(f"  📱 Messages: {messages_count} responses, avg {messages_24h['avg_response_time_formatted']}")
         if gmail_count > 0:
-            print(f"  Gmail: {gmail_count} responses, avg {gmail_24h['avg_response_time_formatted']}")
+            print(f"  📧 Work Gmail: {gmail_count} responses, avg {gmail_24h['avg_response_time_formatted']}")
+        if personal_gmail_count > 0:
+            print(f"  📧 Personal Gmail: {personal_gmail_count} responses, avg {personal_gmail_24h['avg_response_time_formatted']}")
         if outlook_count > 0:
-            print(f"  Outlook: {outlook_count} responses, avg {outlook_24h['avg_response_time_formatted']}")
+            print(f"  📧 Outlook: {outlook_count} responses, avg {outlook_24h['avg_response_time_formatted']}")
         
-        gmail_7d = gmail_stats.get('last_7d', {})
-        outlook_7d = outlook_stats.get('last_7d', {}) if outlook_stats else {}
-        messages_7d = messages_stats.get('last_7d', {}) if messages_stats else {}
-        print(f"\n7d Total: {gmail_7d.get('total_responses', 0) + outlook_7d.get('total_responses', 0) + messages_7d.get('total_responses', 0)} responses")
-        
-        gmail_28d = gmail_stats.get('last_28d', {})
-        outlook_28d = outlook_stats.get('last_28d', {}) if outlook_stats else {}
-        messages_28d = messages_stats.get('last_28d', {}) if messages_stats else {}
-        print(f"28d Total: {gmail_28d.get('total_responses', 0) + outlook_28d.get('total_responses', 0) + messages_28d.get('total_responses', 0)} responses")
+        # Todoist tasks
+        if todoist_24h.get('total_completed', 0) > 0:
+            tasks_completed = todoist_24h['total_completed']
+            avg_latency = todoist_24h.get('avg_latency_formatted', 'N/A')
+            print(f"\n✅ TODOIST TASKS:")
+            print(f"  Completed: {tasks_completed} tasks")
+            if avg_latency != 'N/A':
+                print(f"  Avg Completion Time: {avg_latency}")
         
         # Send via email
-        return self.send_report_via_gmail(gmail_stats, outlook_stats, messages_stats)
+        return self.send_report_via_gmail(gmail_stats, personal_gmail_stats, outlook_stats, messages_stats, todoist_stats)
 
 
 def main():
