@@ -90,10 +90,15 @@ class EmailReporter:
         
         Combines Work Gmail, Personal Gmail, Outlook, Messages, and Todoist stats with breakouts.
         """
-        # Extract Gmail stats
+        # Extract Work Gmail stats
         gmail_24h = gmail_stats.get('last_24h', {})
         gmail_7d = gmail_stats.get('last_7d', {})
         gmail_28d = gmail_stats.get('last_28d', {})
+        
+        # Extract Personal Gmail stats if available
+        personal_gmail_24h = personal_gmail_stats.get('last_24h', {}) if personal_gmail_stats else {}
+        personal_gmail_7d = personal_gmail_stats.get('last_7d', {}) if personal_gmail_stats else {}
+        personal_gmail_28d = personal_gmail_stats.get('last_28d', {}) if personal_gmail_stats else {}
         
         # Extract Outlook stats if available
         outlook_24h = outlook_stats.get('last_24h', {}) if outlook_stats else {}
@@ -105,14 +110,22 @@ class EmailReporter:
         messages_7d = messages_stats.get('last_7d', {}) if messages_stats else {}
         messages_28d = messages_stats.get('last_28d', {}) if messages_stats else {}
         
-        # Calculate combined totals
+        # Extract Todoist stats if available
+        todoist_24h = todoist_stats.get('last_24h', {}) if todoist_stats else {}
+        todoist_7d = todoist_stats.get('last_7d', {}) if todoist_stats else {}
+        todoist_28d = todoist_stats.get('last_28d', {}) if todoist_stats else {}
+        
+        # Calculate combined totals (communication responses)
         combined_24h_total = (gmail_24h.get('total_responses', 0) + 
+                             personal_gmail_24h.get('total_responses', 0) +
                              outlook_24h.get('total_responses', 0) + 
                              messages_24h.get('total_responses', 0))
         combined_7d_total = (gmail_7d.get('total_responses', 0) + 
+                            personal_gmail_7d.get('total_responses', 0) +
                             outlook_7d.get('total_responses', 0) + 
                             messages_7d.get('total_responses', 0))
         combined_28d_total = (gmail_28d.get('total_responses', 0) + 
+                             personal_gmail_28d.get('total_responses', 0) +
                              outlook_28d.get('total_responses', 0) + 
                              messages_28d.get('total_responses', 0))
         
@@ -133,9 +146,10 @@ class EmailReporter:
         
         # Calculate combined response time distribution for 24h
         gmail_response_times_24h = gmail_24h.get('response_details', [])
+        personal_gmail_response_times_24h = personal_gmail_24h.get('response_details', [])
         outlook_response_times_24h = outlook_24h.get('response_details', [])
         messages_response_times_24h = messages_24h.get('response_details', [])
-        all_response_times_24h = gmail_response_times_24h + outlook_response_times_24h + messages_response_times_24h
+        all_response_times_24h = gmail_response_times_24h + personal_gmail_response_times_24h + outlook_response_times_24h + messages_response_times_24h
         
         combined_under_1h = sum(1 for rt in all_response_times_24h if rt['response_time'].total_seconds() < 3600)
         combined_under_24h = sum(1 for rt in all_response_times_24h if rt['response_time'].total_seconds() < 86400)
@@ -162,7 +176,7 @@ class EmailReporter:
             period_display = "Previous Day"
         
         # Helper function to create account breakout HTML
-        def create_account_breakout(gmail_data, outlook_data, messages_data, title):
+        def create_account_breakout(gmail_data, personal_gmail_data, outlook_data, messages_data, title):
             html = f'<div class="account-breakouts"><h4>{title}</h4>'
             
             # Messages section (show first since it's usually fastest)
@@ -184,12 +198,12 @@ class EmailReporter:
                 </div>
                 '''
             
-            # Gmail section
+            # Work Gmail section
             if gmail_data.get('total_responses', 0) > 0:
-                domain = gmail_data.get('email_address', 'Gmail').split('@')[1] if '@' in gmail_data.get('email_address', '') else 'Gmail'
+                domain = gmail_data.get('email_address', 'Work Gmail').split('@')[1] if '@' in gmail_data.get('email_address', '') else 'Work Gmail'
                 html += f'''
                 <div class="account-section">
-                    <div class="account-header">📧 {domain}</div>
+                    <div class="account-header">📧 {domain} (Work)</div>
                     <div class="stat-row-small">
                         <span class="stat-label">Responses</span>
                         <span class="stat-value">{gmail_data['total_responses']}</span>
@@ -197,6 +211,23 @@ class EmailReporter:
                     <div class="stat-row-small">
                         <span class="stat-label">Average</span>
                         <span class="stat-value">{gmail_data['avg_response_time_formatted']}</span>
+                    </div>
+                </div>
+                '''
+            
+            # Personal Gmail section
+            if personal_gmail_data and personal_gmail_data.get('total_responses', 0) > 0:
+                domain = personal_gmail_data.get('email_address', 'Personal Gmail').split('@')[1] if '@' in personal_gmail_data.get('email_address', '') else 'Personal Gmail'
+                html += f'''
+                <div class="account-section">
+                    <div class="account-header">📧 {domain} (Personal)</div>
+                    <div class="stat-row-small">
+                        <span class="stat-label">Responses</span>
+                        <span class="stat-value">{personal_gmail_data['total_responses']}</span>
+                    </div>
+                    <div class="stat-row-small">
+                        <span class="stat-label">Average</span>
+                        <span class="stat-value">{personal_gmail_data['avg_response_time_formatted']}</span>
                     </div>
                 </div>
                 '''
@@ -222,7 +253,7 @@ class EmailReporter:
             return html
         
         # Build previous day breakout
-        breakout_24h_html = create_account_breakout(gmail_24h, outlook_24h, messages_24h, "Previous Day Breakout")
+        breakout_24h_html = create_account_breakout(gmail_24h, personal_gmail_24h, outlook_24h, messages_24h, "Previous Day Breakout")
         
         # Build rolling averages section
         rolling_averages_html = ""
@@ -233,9 +264,10 @@ class EmailReporter:
             if combined_7d_total > 0:
                 # Calculate combined 7d average
                 gmail_7d_responses = gmail_7d.get('response_details', [])
+                personal_gmail_7d_responses = personal_gmail_7d.get('response_details', [])
                 outlook_7d_responses = outlook_7d.get('response_details', [])
                 messages_7d_responses = messages_7d.get('response_details', [])
-                all_7d_responses = gmail_7d_responses + outlook_7d_responses + messages_7d_responses
+                all_7d_responses = gmail_7d_responses + personal_gmail_7d_responses + outlook_7d_responses + messages_7d_responses
                 if all_7d_responses:
                     combined_7d_avg_seconds = sum(rt['response_time'].total_seconds() for rt in all_7d_responses) / len(all_7d_responses)
                     combined_7d_avg_formatted = GmailAnalyzer.format_duration(combined_7d_avg_seconds)
@@ -253,7 +285,7 @@ class EmailReporter:
                         <span class="stat-label">Combined Average</span>
                         <span class="stat-value">{combined_7d_avg_formatted}</span>
                     </div>
-                    {create_account_breakout(gmail_7d, outlook_7d, messages_7d, "")}
+                    {create_account_breakout(gmail_7d, personal_gmail_7d, outlook_7d, messages_7d, "")}
                 </div>
                 '''
             
@@ -261,9 +293,10 @@ class EmailReporter:
             if combined_28d_total > 0:
                 # Calculate combined 28d average
                 gmail_28d_responses = gmail_28d.get('response_details', [])
+                personal_gmail_28d_responses = personal_gmail_28d.get('response_details', [])
                 outlook_28d_responses = outlook_28d.get('response_details', [])
                 messages_28d_responses = messages_28d.get('response_details', [])
-                all_28d_responses = gmail_28d_responses + outlook_28d_responses + messages_28d_responses
+                all_28d_responses = gmail_28d_responses + personal_gmail_28d_responses + outlook_28d_responses + messages_28d_responses
                 if all_28d_responses:
                     combined_28d_avg_seconds = sum(rt['response_time'].total_seconds() for rt in all_28d_responses) / len(all_28d_responses)
                     combined_28d_avg_formatted = GmailAnalyzer.format_duration(combined_28d_avg_seconds)
@@ -281,11 +314,35 @@ class EmailReporter:
                         <span class="stat-label">Combined Average</span>
                         <span class="stat-value">{combined_28d_avg_formatted}</span>
                     </div>
-                    {create_account_breakout(gmail_28d, outlook_28d, messages_28d, "")}
+                    {create_account_breakout(gmail_28d, personal_gmail_28d, outlook_28d, messages_28d, "")}
                 </div>
                 '''
             
             rolling_averages_html += '</div>'
+        
+        # Build Todoist section if we have task data
+        todoist_html = ""
+        if todoist_24h.get('total_completed', 0) > 0:
+            tasks_completed = todoist_24h['total_completed']
+            avg_latency = todoist_24h.get('avg_latency_formatted', 'N/A')
+            
+            todoist_html = '<div class="addendum" style="border-top: 2px solid #27ae60; background-color: #e8f8f5;"><h3>✅ Todoist Tasks Completed</h3>'
+            todoist_html += f'''
+            <div class="stat-row">
+                <span class="stat-label">Tasks Completed</span>
+                <span class="stat-value">{tasks_completed}</span>
+            </div>
+            '''
+            
+            if avg_latency != 'N/A':
+                todoist_html += f'''
+                <div class="stat-row">
+                    <span class="stat-label">Average Completion Time</span>
+                    <span class="stat-value">{avg_latency}</span>
+                </div>
+                '''
+            
+            todoist_html += '</div>'
         
         html = f"""
         <html>
@@ -457,6 +514,8 @@ class EmailReporter:
                 </div>
                 
                 {rolling_averages_html}
+                
+                {todoist_html}
                 
                 <div class="footer">
                     Generated on {datetime.now(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}<br>
